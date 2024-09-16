@@ -16,10 +16,10 @@ colunas_mapeamento = pd.DataFrame({
         })
 
 colunas_elementar = pd.DataFrame({
-            'Elementares': [],
-            'Item': [],
+            'Elementar': [],
+            'Descricao do Item': [],
             'Unidade': [],
-            'Simples / Composto': []
+            'Simples/Composto': []
         })
 
 def dataframe_to_markdown(df):
@@ -67,9 +67,9 @@ if mapeamento_arquivo is not None:
 
         # Selecionando as variáveis
         mapeamento = mapeamento[['Elementar', 'CNPJ', 'Status do Item']]
-        elementares = elementares[['Elementares', 'Item', 'Unidade', 'Simples / Composto']]
+        elementares = elementares[['Elementar', 'Descricao do Item', 'Unidade', 'Simples/Composto']]
 
-        planilha = pd.merge(elementares, mapeamento, left_on='Elementares', right_on='Elementar', how='left')
+        planilha = pd.merge(elementares, mapeamento, left_on='Elementar', right_on='Elementar', how='left')
 
         planilha['status'] = planilha['Status do Item'].apply(lambda x: 'Sem status' if pd.isna(x) else ('PO' if x == 'PO' else ('AG' if x == 'AG' else 'NG')))
 
@@ -83,21 +83,21 @@ if mapeamento_arquivo is not None:
         planilha = pd.merge(planilha, prioridade, on='status', how='left')
 
         # Ordenar os dados
-        planilha = planilha.sort_values(by=['Elementares', 'CNPJ', 'prioridade'])
+        planilha = planilha.sort_values(by=['Elementar', 'CNPJ', 'prioridade'])
 
         planilha['CNPJ'] = planilha['CNPJ'].fillna('CNPJ_DESCONHECIDO')
 
         # Agrupar e filtrar para manter apenas a primeira linha por grupo
-        planilha = planilha.groupby(['Elementares', 'CNPJ']).head(1)
+        planilha = planilha.groupby(['Elementar', 'CNPJ']).head(1)
 
         # Agrupar e contar a quantidade mapeada por status
         qtd_mapeada_por_status = (
-            planilha.groupby(['Elementares', 'status']).size().reset_index(name='count')
+            planilha.groupby(['Elementar', 'status']).size().reset_index(name='count')
         )
 
         # Pivotar para o formato wide
         qtd_mapeada_por_status = qtd_mapeada_por_status.pivot_table(
-            index='Elementares',
+            index='Elementar',
             columns='status',
             values='count',
             fill_value=0
@@ -105,20 +105,22 @@ if mapeamento_arquivo is not None:
 
         qtd_mapeada_por_status.drop(columns=['Sem status'], inplace=True)
 
-        empresas = pd.merge(qtd_mapeada_por_status, elementares, left_on='Elementares', right_on='Elementares', how='left')
+        empresas = pd.merge(qtd_mapeada_por_status, elementares, left_on='Elementar', right_on='Elementar', how='left')
 
         empresas['Empresas Mapeadas'] = empresas['PO'] + empresas['AG'] + empresas['NG']
 
         # Definir a ordem desejada das colunas
         colunas_reordenadas = [
-            'Elementares', 'Item', 'Unidade', 'Simples / Composto', 'Empresas Mapeadas', 'PO', 'NG', 'AG'
+            'Elementar', 'Descricao do Item', 'Unidade', 'Simples/Composto', 'Empresas Mapeadas', 'PO', 'NG', 'AG'
         ]
 
         # Reordenar as colunas usando reindex
         empresas = empresas.reindex(columns=colunas_reordenadas)
 
+        # Apresentando a tabela com os resultados
         st.write(empresas)
 
+        # Download da tabela
         buffer = BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
             empresas.to_excel(writer, index=False, sheet_name="Contagem")
