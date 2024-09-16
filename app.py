@@ -64,6 +64,7 @@ if mapeamento_arquivo is not None:
 
         # Lendo o arquivo de elementares
         elementares = pd.read_excel(elementares_arquivo).astype(str)
+        elementares.columns = elementares.columns.str.replace('\n', '').str.strip()
 
         # Selecionando as variáveis
         mapeamento = mapeamento[['Elementar', 'CNPJ', 'Status do Item']]
