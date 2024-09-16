@@ -43,7 +43,7 @@ with st.expander("Dados necessários"):
     st.markdown('''
     ''')
     st.markdown('''          
-    **Importante:** as colunas devem conter exatamente os mesmos nomes apresentados acima.
+    **Importante:** as colunas devem conter exatamente os nomes apresentados acima.
     ''')
 
 st.subheader('Selecione o arquivo de mapeamento:', divider="red")
