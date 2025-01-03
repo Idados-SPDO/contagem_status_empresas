@@ -2,3 +2,4 @@ streamlit
 openpyxl
 tabulate
 unidecode
+xlsxwriter
