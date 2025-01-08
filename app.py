@@ -78,15 +78,34 @@ def to_excel(df):
     return output.getvalue()
     
 
-n_sheet1 = ['Mapeamento-EPE.xlsx', 'Mapeamento-SCO.xlsx', 'Mapeamento-SIMG ÍNDICE.xlsx', 'Mapeamento-IPA e INCC.xlsx']
-n_sheet2 = ['Mapeamento_INFRAES.xlsx', 'Mapeamento_SICFER.xlsx', 'Mapeamento_SABESP.xlsx', 'Mapeamento_DER_MG_2023.xlsx', 
-            'Mapeamento_FGV_Transportes.xlsx', 'Mapeamento_CAGECE.xlsx', 'Mapeamento_SANEAGO.xlsx', 'Mapeamento_DER_SP.xlsx',
-            'Mapeamento_GOINFRA.xlsx']
-n_sheet3 = ['Mapeamento_ECON_DNIT.xlsx', 'Mapeamento_SICRO (2018 a 2022).xlsx', 'Mapeamento_SICRO (2023).xlsx', 
-            'Mapeamento_EST_VAREJO.xlsx']
-n_sheet4 = ['Mapeamento_DER_MG_2022.xlsx']
+n_sheet1 = ['Mapeamento-EPE.xlsx', ## 1job
+'Mapeamento-SCO.xlsx', ## 1job
+'Mapeamento-SIMG ÍNDICE.xlsx', ## 4job
+'Mapeamento-IPA e INCC.xlsx'
+]
+n_sheet2 = ['Mapeamento_INFRAES.xlsx', ## 27jobs
+'Mapeamento_SICFER.xlsx', 
+'Mapeamento_SABESP.xlsx', 
+'Mapeamento_DER_MG_2023.xlsx', ## 6jobs 
+'Mapeamento_FGV_Transportes.xlsx', ## 1job
+'Mapeamento_CAGECE.xlsx', ## 1job
+'Mapeamento_SANEAGO.xlsx', ## 1job
+'Mapeamento_DER_SP.xlsx', ## 15jobs
+'Mapeamento_GOINFRA.xlsx' ## 1job
+]
+n_sheet3 = [
+    'Mapeamento_ECON_DNIT.xlsx', ## 1job
+    'Mapeamento_SICRO (2018 a 2022).xlsx', ## 27jobs
+    'Mapeamento_SICRO (2023).xlsx', ## 27jobs
+    'Mapeamento_EST_VAREJO.xlsx' ## 27jobs
+    ]
+n_sheet4 = ['Mapeamento_DER_MG_2022.xlsx'] ## 6jobs
 n_sheet6 = ['2- CONTROLE DE MAPEAMENTO - APOIO DNIT-ANTT 2020-2021.xlsx']
 
+
+## Filtrar por job
+
+job_1 = []
 @st.cache_data
 def carregar_mapeamento(arquivo, sheets):
     dataframes = []
@@ -148,6 +167,7 @@ if mapeamento_arquivo is not None:
     
     st.subheader('Selecione o arquivo de elementares:', divider = "red")
     elementares_arquivo = st.file_uploader("arquivo de elementares", type="xlsx", label_visibility = "hidden")
+    
     @st.cache_data
     def processar_ufs(df):
         uf_pricing = pd.DataFrame({'Local': df['uf do preço'].unique()})
@@ -180,33 +200,21 @@ if mapeamento_arquivo is not None:
 
 
         # Selecionando as variáveis necessárias
-        mapeamento = mapeamento[['elementar', 'cnpj', 'status do item', 'job', 'data do mapeamento', 'uf do preço']].copy()
+        mapeamento = mapeamento[['elementar', 'cnpj', 'status do item', 'job', 'data do mapeamento']].copy()
         elementares = elementares[['elementar', 'descricao do item', 'unidade', 'simples/composto']].copy()
 
-        @st.cache_data
-        def preparar_dados(mapeamento, elementares, uf_pricing):
-            mapeamento = mapeamento.merge(
-                uf_pricing[['Local', 'UF']],
-                left_on='uf do preço',
-                right_on='Local',
-                how='left'
-            )
-            mapeamento['uf do preço'] = mapeamento['UF']
-            mapeamento.drop(columns=['Local', 'UF'], inplace=True)
-            planilha = pd.merge(elementares, mapeamento, on='elementar', how='left')
-            return planilha
 
-        planilha = preparar_dados(mapeamento, elementares, df_locais_por_uf)
+        planilha = pd.merge(elementares, mapeamento, left_on = 'elementar', right_on = 'elementar', how = 'left')
 
-        planilha['status'] = planilha['status do item'].apply(lambda x: 'Sem status' if pd.isna(x) else ('PO' if x == 'PO' else ('AG' if x == 'AG' else 'NG')))
+        planilha['status'] = planilha['status do item'].apply(lambda x: 'Sem status' if pd.isna(x) else ('PO' if x == 'PO' else ('AG' if x == 'AG' else ('RE' if x == 'RE' else 'NG'))))
 
         # Preenchendo o job quando não aparece para não sumir quando fizer a ligação com a tabela de prioridades
         planilha['job'] = planilha['job'].fillna('Sem Job')
 
         # Criando o DataFrame de prioridades
         prioridade = pd.DataFrame({
-            'status': ['PO', 'AG', 'NG', 'Sem status'],
-            'prioridade': [1, 2, 3, 4]
+            'status': ['PO', 'AG', 'RE','NG', 'Sem status'],
+            'prioridade': [1, 2, 3, 4, 5]
         })
 
         # Realizando a junção dos dados com a ordem de prioridades
@@ -225,12 +233,12 @@ if mapeamento_arquivo is not None:
         
         # Agrupando e contando a quantidade mapeada por status
         qtd_mapeada_por_status = (
-            planilha.groupby(['job', 'elementar', 'data do mapeamento', 'uf do preço', 'status']).size().reset_index(name='count')
+            planilha.groupby(['job', 'elementar', 'data do mapeamento', 'status']).size().reset_index(name='count')
         )
         
         # Pivotando para o formato wide
         qtd_mapeada_por_status = qtd_mapeada_por_status.pivot_table(
-            index=['job', 'elementar', 'data do mapeamento', 'uf do preço'],
+            index=['job', 'elementar', 'data do mapeamento'],
             columns='status',
             values='count',
             fill_value=0
@@ -242,31 +250,9 @@ if mapeamento_arquivo is not None:
 
         # Trazendo as informações para a tabela 
         empresas = pd.merge(qtd_mapeada_por_status, elementares, on='elementar', how='left')
-        status_colunas = ['PO', 'NG', 'AG']
+        status_colunas = ['PO', 'NG', 'RE','AG']
+        jobs_unicos = empresas['job'].unique()
         ufs_unicas = df_locais_por_uf['UF'].str.upper().unique()
-        
-        if 'uf do preço' not in planilha.columns:
-            st.warning("A coluna 'uf do preço' não foi propagada corretamente.")
-
-        if 'uf do preço' in empresas.columns:
-            for uf in ufs_unicas:
-                for status in status_colunas:
-                    nova_coluna = f"{uf}-{status}".upper()
-                    empresas[nova_coluna] = (empresas['uf do preço'] == uf) & (empresas[status] > 0)
-
-        else:
-            st.error("Colunas necessárias ('uf do preço' ou 'status') não estão presentes no DataFrame.")
-            st.stop()
-
-        
-        for uf in ufs_unicas:
-            empresas[uf] = empresas['elementar'].map(
-                lambda elem: any(
-                    (df_locais_por_uf['UF'] == uf) & 
-                    (df_locais_por_uf['Local'].str.contains(str(elem), na=False))
-                )
-            ).astype(int)   # Preenchendo com 1 (presente) ou 0 (ausente)
-        
 
         # Garantindo que todas as colunas estejam presentes no DataFrame
         for status in status_colunas:
@@ -274,27 +260,25 @@ if mapeamento_arquivo is not None:
                 empresas[status] = 0  
 
         # Gerando o resultado da quantidade de empresas mapeadas
-        empresas['Empresas Mapeadas'] = empresas['PO'] + empresas['AG'] + empresas['NG']
+        empresas['Empresas Mapeadas'] = empresas['PO'] + empresas['AG'] + empresas['RE']+ empresas['NG']
         # Definindo a ordem das colunas
         colunas_reordenadas = [
-            'job', 'data do mapeamento' ,'elementar', 'descricao do item', 'unidade', 'simples/composto','uf do preço' ,'Empresas Mapeadas', 'PO', 'NG', 'AG'
+            'job', 'data do mapeamento' ,'elementar', 'descricao do item', 'unidade', 'simples/composto' ,'Empresas Mapeadas', 'PO','RE', 'NG', 'AG'
         ]
         colunas_existentes = empresas.columns.tolist()  # Todas as colunas do DataFrame
         colunas_completas = colunas_reordenadas + [col for col in colunas_existentes if col not in colunas_reordenadas]
-
         # Reordenando as colunas 
         empresas = empresas[colunas_completas]
-        for uf in ufs_unicas:
+        for job in jobs_unicos:
             for status in status_colunas:
-                # Nome da nova coluna, garantido como UF-STATUS
-                nova_coluna = f"{uf}-{status}".upper()
-                # Atribuir diretamente os valores com base na UF e STATUS
+                # Nome da nova coluna, incluindo apenas o job e o status
+                nova_coluna = f"{job.strip().upper()}-{status}".upper()
+                # Atribuir diretamente os valores com base na combinação de job e STATUS
                 empresas[nova_coluna] = empresas.apply(
-                    lambda row: row[status] if row['uf do preço'] == uf else 0, axis=1
+                    lambda row: row[status] if row['job'] == job else 0, axis=1
                 )
-
         # Remover colunas originais de UFs, se necessário
-        empresas = empresas.drop(columns=ufs_unicas, errors='ignore')
+        empresas = empresas.drop(columns=status_colunas, errors='ignore')
 
         # Filtro por data
         empresas['data do mapeamento'] = pd.to_datetime(empresas['data do mapeamento'], errors='coerce')
@@ -351,9 +335,11 @@ if mapeamento_arquivo is not None:
             empresas_filtradas['data do mapeamento'] = empresas_filtradas['data do mapeamento'].dt.strftime('%d/%m/%Y')
 
         empresas_filtradas.columns = [
-            col if col in ufs_unicas or col in ['PO', 'NG', 'AG'] else col.title()
+            col.title() if col in ufs_unicas or col in ['job', 'elementar','descricao do item', 'unidade', 'simples/composto'] else col
             for col in empresas_filtradas.columns
         ]
+
+        empresas_filtradas['Elementar'] = empresas_filtradas['Elementar'].astype(str).str.replace(",", "")
 
         if 'data do mapeamento' in empresas_filtradas.columns:
             empresas_filtradas_sem_data = empresas_filtradas.drop(columns=['data do mapeamento'])
